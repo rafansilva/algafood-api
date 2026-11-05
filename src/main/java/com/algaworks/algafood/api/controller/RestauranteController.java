@@ -1,25 +1,18 @@
 package com.algaworks.algafood.api.controller;
 
-import com.algaworks.algafood.domain.exception.EntidadeEmUsoException;
 import com.algaworks.algafood.domain.exception.EntidadeNaoEncontradaException;
+import com.algaworks.algafood.domain.exception.NegocioException;
 import com.algaworks.algafood.domain.model.Restaurante;
 import com.algaworks.algafood.domain.repository.RestauranteRepository;
 import com.algaworks.algafood.domain.service.CadastroRestauranteService;
-import com.algaworks.algafood.infrastructure.repository.spec.RestauranteComFreteGratisSpec;
-import com.algaworks.algafood.infrastructure.repository.spec.RestauranteComNomeSemelhanteSpec;
 import org.springframework.beans.BeanUtils;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.data.repository.query.Param;
 import org.springframework.http.HttpStatus;
-import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.math.BigDecimal;
 import java.util.List;
 import java.util.Optional;
-
-import static com.algaworks.algafood.infrastructure.repository.spec.RestauranteSpecs.comFreteGratis;
-import static com.algaworks.algafood.infrastructure.repository.spec.RestauranteSpecs.comNomeSemelhante;
 
 @RestController
 @RequestMapping("/restaurantes")
@@ -37,42 +30,37 @@ public class RestauranteController {
     }
 
     @GetMapping("/{restauranteId}")
-    public ResponseEntity<Restaurante> buscar(@PathVariable Long restauranteId) {
-        Optional<Restaurante> restaurante = restauranteRepository.findById(restauranteId);
-
-        return restaurante.map(ResponseEntity::ok).orElseGet(() -> ResponseEntity.notFound().build());
+    public Restaurante buscar(@PathVariable Long restauranteId) {
+        return cadastroRestauranteService.buscarOuFalhar(restauranteId);
     }
 
     @PostMapping
-    public ResponseEntity<Restaurante> adicionar(@RequestBody Restaurante restaurante) {
-        return ResponseEntity.status(HttpStatus.CREATED).body(cadastroRestauranteService.salvar(restaurante));
+    @ResponseStatus(HttpStatus.CREATED)
+    public Restaurante adicionar(@RequestBody Restaurante restaurante) {
+        try {
+            return cadastroRestauranteService.salvar(restaurante);
+        } catch (EntidadeNaoEncontradaException e) {
+            throw new NegocioException(e.getMessage());
+        }
     }
 
     @PutMapping("/{restauranteId}")
-    public ResponseEntity<Restaurante> atualizar(@PathVariable Long resturanteId, @RequestBody Restaurante restaurante) {
-        Optional<Restaurante> restauranteAtual = restauranteRepository.findById(resturanteId);
+    public Restaurante atualizar(@PathVariable Long resturanteId, @RequestBody Restaurante restaurante) {
+        Restaurante restauranteAtual = cadastroRestauranteService.buscarOuFalhar(resturanteId);
 
-        if (restauranteAtual.isPresent()) {
-            BeanUtils.copyProperties(restaurante, restauranteAtual.get(),
-                    "id", "formasPagamento", "endereco", "dataCadastro", "produtos");
-
-            Restaurante restauranteSalvo = cadastroRestauranteService.salvar(restauranteAtual.get());
-            return ResponseEntity.ok(restauranteSalvo);
+        BeanUtils.copyProperties(restaurante, restauranteAtual,
+                "id", "formasPagamento", "endereco", "dataCadastro", "produtos");
+        try {
+            return cadastroRestauranteService.salvar(restauranteAtual);
+        } catch (EntidadeNaoEncontradaException e) {
+            throw new NegocioException(e.getMessage());
         }
-
-        return ResponseEntity.notFound().build();
     }
 
     @DeleteMapping("/{restauranteId}")
-    public ResponseEntity<?> remover(@PathVariable Long restauranteId) {
-        try {
-            cadastroRestauranteService.excluir(restauranteId);
-            return ResponseEntity.noContent().build();
-        } catch (EntidadeNaoEncontradaException e) {
-            return ResponseEntity.notFound().build();
-        } catch (EntidadeEmUsoException e) {
-            return ResponseEntity.status(HttpStatus.CONFLICT).build();
-        }
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void remover(@PathVariable Long restauranteId) {
+        cadastroRestauranteService.excluir(restauranteId);
     }
 
     @GetMapping("/por-nome")
